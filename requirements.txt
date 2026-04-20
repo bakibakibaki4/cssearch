@@ -1,5 +1,4 @@
 flask
 flask-cors
-requests[security]
+httpx[brotli]
 gunicorn
-brotli
