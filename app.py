@@ -11,6 +11,10 @@ CORS(app, origins=[
 
 HEADERS = {"Accept": "application/json"}
 
+@app.route("/")
+def health():
+    return jsonify({"status": "ok"})
+
 @app.route("/items")
 def items():
     try:
