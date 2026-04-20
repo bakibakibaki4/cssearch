@@ -3,7 +3,11 @@ from flask_cors import CORS
 import requests
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=[
+    "https://cssearch-lac.vercel.app",
+    "http://localhost:5000",
+    "null"
+])
 
 HEADERS = {"Accept": "application/json"}
 
