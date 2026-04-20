@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CS2 Skin Price Tracker</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #1a1a1a; padding: 2rem 1rem; }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 1.5rem; }
+  .search-wrap { position: relative; margin-bottom: 1rem; }
+  .search-row { display: flex; gap: 8px; }
+  .search-row input { flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; background: #fff; outline: none; }
+  .search-row input:focus { border-color: #888; }
+  .search-row button { padding: 10px 18px; background: #1a1a1a; color: #fff; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+  .search-row button:hover { background: #333; }
+  .dropdown { position: absolute; top: 100%; left: 0; right: 80px; background: #fff; border: 1px solid #ddd; border-radius: 8px; margin-top: 4px; z-index: 99; max-height: 280px; overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+  .dd-item { padding: 10px 14px; font-size: 13px; cursor: pointer; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; }
+  .dd-item:last-child { border-bottom: none; }
+  .dd-item:hover, .dd-item.active { background: #f5f5f5; }
+  .dd-item-price { font-size: 11px; color: #888; }
+  .dd-msg { padding: 12px 14px; font-size: 13px; color: #888; }
+  .skin-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 1.5rem; min-height: 4px; }
+  .tag { display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #ddd; border-radius: 20px; padding: 4px 12px; font-size: 13px; }
+  .tag button { background: none; border: none; cursor: pointer; color: #999; font-size: 16px; padding: 0; line-height: 1; }
+  .tag button:hover { color: #333; }
+  .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .status { font-size: 12px; color: #888; }
+  .refresh-btn { font-size: 12px; padding: 6px 12px; background: #fff; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; }
+  .refresh-btn:hover { background: #f5f5f5; }
+  .skin-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden; margin-bottom: 1rem; }
+  .skin-header { padding: 14px 16px; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+  .skin-name { font-size: 14px; font-weight: 600; }
+  .best-badge { font-size: 11px; background: #e6f7ee; color: #1a7a40; padding: 3px 10px; border-radius: 20px; font-weight: 500; }
+  .prices-row { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .price-cell { padding: 14px 16px; border-right: 1px solid #f0f0f0; }
+  .price-cell:last-child { border-right: none; }
+  .platform-name { font-size: 11px; color: #888; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .price-val { font-size: 16px; font-weight: 600; }
+  .price-val.best { color: #1a7a40; }
+  .price-val.muted { color: #bbb; font-size: 13px; font-weight: 400; }
+  .price-val.err { color: #d9534f; font-size: 12px; font-weight: 400; }
+  .fee-note { font-size: 10px; color: #bbb; margin-top: 2px; }
+  .empty-state { text-align: center; padding: 4rem 1rem; color: #aaa; font-size: 15px; background: #fff; border-radius: 12px; border: 1px solid #e0e0e0; }
+  @media (max-width: 600px) { .prices-row { grid-template-columns: repeat(2, 1fr); } .price-cell:nth-child(2) { border-right: none; } .price-cell:nth-child(3) { border-top: 1px solid #f0f0f0; } .price-cell:nth-child(4) { border-top: 1px solid #f0f0f0; } }
+</style>
+</head>
+<body>
+
+<h1>CS2 Skin Price Tracker</h1>
+
+<div class="search-wrap">
+  <div class="search-row">
+    <input type="text" id="skinInput" placeholder="Traži skin, npr. redline, awp asiimov..." autocomplete="off" />
+    <button onclick="addSelected()">Dodaj</button>
+  </div>
+  <div class="dropdown" id="dropdown" style="display:none;"></div>
+</div>
+
+<div class="skin-tags" id="skinTags"></div>
+
+<div class="top-bar">
+  <div class="status" id="statusBar">Počni tipkati za pretragu</div>
+  <button class="refresh-btn" onclick="fetchAll()" id="refreshBtn" style="display:none;">Osvježi cijene</button>
+</div>
+
+<div id="resultsGrid">
+  <div class="empty-state">Upiši naziv skina i dodaj ga za usporedbu cijena</div>
+</div>
+
+<script>
+const BASE = 'https://web-production-0c93d.up.railway.app';
+
+const PLATFORMS = [
+  { name: 'Skinport', fee: 12, fetchFn: fetchSkinport },
+  { name: 'Waxpeer', fee: 3, fetchFn: fetchWaxpeer },
+  { name: 'DMarket', fee: 8, fetchFn: fetchDMarket },
+  { name: 'CS.Money', fee: 6, fetchFn: null },
+];
+
+let skins = [], priceData = {}, selectedSkin = null, activeIdx = -1, searchTimeout = null;
+let allItems = null, loadingItems = false;
+
+const input = document.getElementById('skinInput');
+const dropdown = document.getElementById('dropdown');
+
+async function ensureItems() {
+  if (allItems) return true;
+  if (loadingItems) return false;
+  loadingItems = true;
+  dropdown.style.display = 'block';
+  dropdown.innerHTML = '<div class="dd-msg">Učitavam listu skinova...</div>';
+  try {
+    const resp = await fetch(`${BASE}/items`);
+    if (!resp.ok) throw new Error();
+    allItems = await resp.json();
+    document.getElementById('statusBar').textContent = allItems.length.toLocaleString() + ' skinova učitano';
+    loadingItems = false;
+    return true;
+  } catch {
+    loadingItems = false;
+    dropdown.innerHTML = '<div class="dd-msg">Ne mogu dohvatiti listu s backenda</div>';
+    return false;
+  }
+}
+
+input.addEventListener('input', () => {
+  clearTimeout(searchTimeout);
+  selectedSkin = null;
+  const q = input.value.trim();
+  if (q.length < 2) { hideDropdown(); return; }
+  searchTimeout = setTimeout(() => doSearch(q), 300);
+});
+
+async function doSearch(q) {
+  const ok = await ensureItems();
+  if (!ok) return;
+  const ql = q.toLowerCase();
+  const matches = allItems.filter(i => i.market_hash_name.toLowerCase().includes(ql)).slice(0, 20);
+  activeIdx = -1;
+  dropdown.style.display = 'block';
+  if (!matches.length) { dropdown.innerHTML = `<div class="dd-msg">Nema rezultata za "${q}"</div>`; return; }
+  dropdown.innerHTML = matches.map(item => {
+    const price = item.min_price ? `od €${item.min_price.toFixed(2)}` : '';
+    const safe = item.market_hash_name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<div class="dd-item" data-name="${item.market_hash_name}" onclick="selectItem('${safe}')">
+      <span>${item.market_hash_name}</span>
+      <span class="dd-item-price">${price}</span>
+    </div>`;
+  }).join('');
+}
+
+input.addEventListener('keydown', e => {
+  const items = dropdown.querySelectorAll('.dd-item');
+  if (e.key === 'ArrowDown') { activeIdx = Math.min(activeIdx+1, items.length-1); highlight(items); e.preventDefault(); }
+  else if (e.key === 'ArrowUp') { activeIdx = Math.max(activeIdx-1, 0); highlight(items); e.preventDefault(); }
+  else if (e.key === 'Enter') {
+    if (activeIdx >= 0 && items[activeIdx]) selectItem(items[activeIdx].dataset.name);
+    else addSelected();
+  }
+  else if (e.key === 'Escape') hideDropdown();
+});
+
+document.addEventListener('click', e => { if (!e.target.closest('.search-wrap')) hideDropdown(); });
+function highlight(items) {
+  items.forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+  if (items[activeIdx]) items[activeIdx].scrollIntoView({ block: 'nearest' });
+}
+function hideDropdown() { dropdown.style.display = 'none'; activeIdx = -1; }
+function selectItem(name) { input.value = name; selectedSkin = name; hideDropdown(); }
+
+function addSelected() {
+  const name = selectedSkin || input.value.trim();
+  if (!name || skins.includes(name)) { input.value = ''; selectedSkin = null; return; }
+  skins.push(name); priceData[name] = {};
+  input.value = ''; selectedSkin = null;
+  renderTags(); fetchAll();
+}
+
+function removeSkin(skin) {
+  skins = skins.filter(s => s !== skin);
+  delete priceData[skin];
+  renderTags(); renderResults();
+  if (!skins.length) document.getElementById('refreshBtn').style.display = 'none';
+}
+
+function renderTags() {
+  document.getElementById('skinTags').innerHTML = skins.map(s =>
+    `<div class="tag"><span>${s}</span><button onclick="removeSkin('${s.replace(/'/g,"\\'")}')">×</button></div>`
+  ).join('');
+}
+
+async function fetchSkinport(skinName) {
+  if (allItems) return allItems.find(i => i.market_hash_name === skinName)?.min_price || null;
+  return null;
+}
+
+async function fetchWaxpeer(skinName) {
+  try {
+    const resp = await fetch(`${BASE}/prices/waxpeer?skin=${encodeURIComponent(skinName)}`);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (!data.success || !data.items?.length) return null;
+    const item = data.items.find(i => i.name === skinName);
+    return item ? +(item.min/1000).toFixed(2) : null;
+  } catch { return null; }
+}
+
+async function fetchDMarket(skinName) {
+  try {
+    const resp = await fetch(`${BASE}/prices/dmarket?skin=${encodeURIComponent(skinName)}`);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const price = data.objects?.[0]?.price?.EUR;
+    return price ? +(parseInt(price)/100).toFixed(2) : null;
+  } catch { return null; }
+}
+
+async function fetchAll() {
+  if (!skins.length) return;
+  document.getElementById('refreshBtn').style.display = 'inline';
+  document.getElementById('statusBar').textContent = 'Dohvaćam cijene...';
+  renderResults(true);
+  await Promise.all(skins.map(async skin => {
+    const results = await Promise.all(PLATFORMS.map(async p => ({
+      platform: p.name,
+      price: p.fetchFn ? await p.fetchFn(skin).catch(() => null) : null
+    })));
+    priceData[skin] = {};
+    results.forEach(r => { priceData[skin][r.platform] = r.price; });
+  }));
+  document.getElementById('statusBar').textContent = 'Zadnje ažuriranje: ' + new Date().toLocaleTimeString('hr-HR');
+  renderResults(false);
+}
+
+function renderResults(loading = false) {
+  const grid = document.getElementById('resultsGrid');
+  if (!skins.length) { grid.innerHTML = '<div class="empty-state">Upiši naziv skina i dodaj ga za usporedbu cijena</div>'; return; }
+  grid.innerHTML = skins.map(skin => {
+    const data = priceData[skin] || {};
+    const prices = PLATFORMS.map(p => ({ ...p, price: data[p.name] ?? null }));
+    const valid = prices.filter(p => p.price !== null);
+    const min = valid.length ? Math.min(...valid.map(p => p.price)) : null;
+    const best = valid.find(p => p.price === min);
+    return `<div class="skin-card">
+      <div class="skin-header">
+        <span class="skin-name">${skin}</span>
+        ${best && !loading ? `<span class="best-badge">Najjeftinije: ${best.name}</span>` : ''}
+      </div>
+      <div class="prices-row">
+        ${prices.map(p => {
+          const isBest = !loading && p.price !== null && p.price === min;
+          const display = loading ? `<span class="price-val muted">...</span>`
+            : p.price === null ? `<span class="price-val err">N/A</span>`
+            : `<span class="price-val ${isBest ? 'best' : ''}">€${p.price.toFixed(2)}</span>`;
+          return `<div class="price-cell"><div class="platform-name">${p.name}</div>${display}<div class="fee-note">fee ~${p.fee}%</div></div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+</script>
+</body>
+</html>
