@@ -9,7 +9,10 @@ CORS(app, origins=[
     "null"
 ])
 
-HEADERS = {"Accept": "application/json"}
+HEADERS = {
+    "Accept": "application/json",
+    "Accept-Encoding": "br, gzip, deflate"
+}
 
 @app.route("/")
 def health():
